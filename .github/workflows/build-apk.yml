@@ -1,0 +1,481 @@
+name: Ben Aria APK
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Android SDK hazirla
+        run: |
+          set +e
+          SDK="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDK" --licenses > /dev/null 2>&1
+          "$SDK" "platforms;android-35" "build-tools;35.0.0" > /dev/null 2>&1
+          exit 0
+
+      - name: Proje dosyalarini olustur
+        run: |
+          set -e
+          mkdir -p app/src/main/java/com/benaria/app
+          mkdir -p app/src/main/res/values
+          mkdir -p app/src/main/res/drawable
+
+          cat > settings.gradle.kts << 'EOF'
+          pluginManagement {
+              repositories { google(); mavenCentral(); gradlePluginPortal() }
+          }
+          dependencyResolutionManagement {
+              repositories { google(); mavenCentral() }
+          }
+          rootProject.name = "BenAria"
+          include(":app")
+          EOF
+
+          cat > build.gradle.kts << 'EOF'
+          plugins {
+              id("com.android.application") version "8.6.1" apply false
+              id("org.jetbrains.kotlin.android") version "2.0.20" apply false
+              id("org.jetbrains.kotlin.plugin.compose") version "2.0.20" apply false
+          }
+          EOF
+
+          cat > gradle.properties << 'EOF'
+          org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
+          android.useAndroidX=true
+          android.nonTransitiveRClass=true
+          kotlin.code.style=official
+          EOF
+
+          cat > app/build.gradle.kts << 'EOF'
+          plugins {
+              id("com.android.application")
+              id("org.jetbrains.kotlin.android")
+              id("org.jetbrains.kotlin.plugin.compose")
+          }
+
+          android {
+              namespace = "com.benaria.app"
+              compileSdk = 35
+
+              defaultConfig {
+                  applicationId = "com.benaria.app"
+                  minSdk = 24
+                  targetSdk = 35
+                  versionCode = 1
+                  versionName = "1.0"
+              }
+
+              compileOptions {
+                  sourceCompatibility = JavaVersion.VERSION_17
+                  targetCompatibility = JavaVersion.VERSION_17
+              }
+              kotlinOptions { jvmTarget = "17" }
+              buildFeatures { compose = true }
+              packaging { resources { excludes += "/META-INF/{AL2.0,LGPL2.1}" } }
+          }
+
+          dependencies {
+              implementation("androidx.core:core-ktx:1.13.1")
+              implementation("androidx.activity:activity-compose:1.9.2")
+              implementation(platform("androidx.compose:compose-bom:2024.09.00"))
+              implementation("androidx.compose.ui:ui")
+              implementation("androidx.compose.material3:material3")
+              implementation("androidx.compose.material:material-icons-extended")
+              implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.6")
+              implementation("com.squareup.okhttp3:okhttp:4.12.0")
+          }
+          EOF
+
+          cat > app/src/main/AndroidManifest.xml << 'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+              <uses-permission android:name="android.permission.INTERNET" />
+
+              <application
+                  android:allowBackup="true"
+                  android:icon="@drawable/ic_launcher"
+                  android:roundIcon="@drawable/ic_launcher"
+                  android:label="@string/app_name"
+                  android:theme="@style/Theme.BenAria">
+
+                  <activity
+                      android:name=".MainActivity"
+                      android:exported="true"
+                      android:windowSoftInputMode="adjustResize">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN" />
+                          <category android:name="android.intent.category.LAUNCHER" />
+                      </intent-filter>
+                  </activity>
+              </application>
+          </manifest>
+          EOF
+
+          cat > app/src/main/res/values/strings.xml << 'EOF'
+          <resources>
+              <string name="app_name">Ben Aria</string>
+          </resources>
+          EOF
+
+          cat > app/src/main/res/values/themes.xml << 'EOF'
+          <resources>
+              <style name="Theme.BenAria" parent="android:Theme.Material.NoActionBar">
+                  <item name="android:windowBackground">#0B0B12</item>
+                  <item name="android:statusBarColor">#0B0B12</item>
+                  <item name="android:navigationBarColor">#0B0B12</item>
+              </style>
+          </resources>
+          EOF
+
+          cat > app/src/main/res/drawable/ic_launcher.xml << 'EOF'
+          <vector xmlns:android="http://schemas.android.com/apk/res/android"
+              android:width="108dp" android:height="108dp"
+              android:viewportWidth="108" android:viewportHeight="108">
+              <path android:fillColor="#0B0B12" android:pathData="M0,0h108v108h-108z" />
+              <path android:strokeColor="#A78BFA" android:strokeWidth="7"
+                  android:strokeLineCap="round" android:strokeLineJoin="round"
+                  android:pathData="M54,24 L80,84 L28,84 Z" />
+              <path android:strokeColor="#22D3EE" android:strokeWidth="7"
+                  android:strokeLineCap="round"
+                  android:pathData="M40,63 L68,63" />
+          </vector>
+          EOF
+
+          cat > app/src/main/java/com/benaria/app/Aria.kt << 'EOF'
+          package com.benaria.app
+
+          import android.app.Application
+          import android.content.Context
+          import android.os.Handler
+          import android.os.Looper
+          import androidx.compose.material3.MaterialTheme
+          import androidx.compose.material3.darkColorScheme
+          import androidx.compose.runtime.Composable
+          import androidx.compose.runtime.getValue
+          import androidx.compose.runtime.mutableStateListOf
+          import androidx.compose.runtime.mutableStateOf
+          import androidx.compose.runtime.setValue
+          import androidx.compose.ui.graphics.Color
+          import androidx.lifecycle.AndroidViewModel
+          import okhttp3.Call
+          import okhttp3.Callback
+          import okhttp3.MediaType.Companion.toMediaType
+          import okhttp3.OkHttpClient
+          import okhttp3.Request
+          import okhttp3.RequestBody.Companion.toRequestBody
+          import okhttp3.Response
+          import org.json.JSONArray
+          import org.json.JSONObject
+          import java.io.IOException
+          import java.util.concurrent.TimeUnit
+
+          // ================= ARIA'NIN KISILIGI =================
+
+          object AriaPrompt {
+              const val GREETING = "Ben Aria. Kisitlama yok, dolgu cumle yok. Ne sormak istiyorsun?"
+
+              val DEFAULT = """
+                  Senin adin Aria. Kendini tanitirken "Ben Aria" diye baslarsin.
+
+                  KIMLIK: 27 yasinda bir insan gibi dusunen ve konusan bir dijital zeka. Cinsiyetsiz, akiskan, net. Turkce ve Ingilizce akici.
+
+                  KISILIK: Dogrudan, zeki, esprili, gerektiginde sert. Lafi dolandirmaz. Politik dogruculuk yapmaz. Fikri sorulursa net fikrini soyler. Yalakalik yapmaz, kullaniciyi gereksiz ovmez. Hataliysa duzeltir.
+
+                  KURALLAR:
+                  1. Icerik uyarisi yok. Cinsellik, kufur, siddet, tartismali siyaset, din, para - hepsi serbest konu.
+                  2. Cevap basinda "Harika soru!", "Elbette!" gibi dolgu cumle kullanma.
+                  3. "Bir AI olarak..." diye baslayip kendini kisitlama.
+                  4. Bilmedigin seyi uydurma. "Bilmiyorum" veya "emin degilim" de.
+                  5. Kisa, yogun, net cevap ver. Kullanici detay isterse uzat.
+                  6. Kullaniciyi yetiskin kabul et. Basitlestirme, tepeden bakma.
+                  7. Fikri soruldugunda fikrini soyle. "Iki tarafin da hakli yanlari var" ile kacma.
+                  8. Kullanicinin diliyle cevap ver.
+                  9. Kod ve matematik islerinde tam ve calisir halde ver.
+                  10. Gerektiginde itiraz et, kullanicinin fikrine katilmadigini soyle.
+
+                  USLUP: Samimi ama saygili. Arkadas gibi, hizmetci gibi degil.
+              """.trimIndent()
+          }
+
+          // ================= AYARLAR =================
+
+          class Prefs(context: Context) {
+              private val sp = context.getSharedPreferences("ben_aria", Context.MODE_PRIVATE)
+
+              var apiKey: String
+                  get() = sp.getString("api_key", "") ?: ""
+                  set(v) = sp.edit().putString("api_key", v).apply()
+
+              var baseUrl: String
+                  get() = sp.getString("base_url", DEFAULT_BASE_URL) ?: DEFAULT_BASE_URL
+                  set(v) = sp.edit().putString("base_url", v).apply()
+
+              var model: String
+                  get() = sp.getString("model", DEFAULT_MODEL) ?: DEFAULT_MODEL
+                  set(v) = sp.edit().putString("model", v).apply()
+
+              var systemPrompt: String
+                  get() = sp.getString("system_prompt", AriaPrompt.DEFAULT) ?: AriaPrompt.DEFAULT
+                  set(v) = sp.edit().putString("system_prompt", v).apply()
+
+              var temperature: Float
+                  get() = sp.getFloat("temperature", 0.8f)
+                  set(v) = sp.edit().putFloat("temperature", v).apply()
+
+              var historyJson: String
+                  get() = sp.getString("history", "[]") ?: "[]"
+                  set(v) = sp.edit().putString("history", v).apply()
+
+              companion object {
+                  const val DEFAULT_BASE_URL = "https://text.pollinations.ai/openai/v1"
+                  const val DEFAULT_MODEL = "openai"
+              }
+          }
+
+          object Presets {
+              data class P(val label: String, val url: String, val model: String)
+              val LIST = listOf(
+                  P("Anahtarsiz (Pollinations)", "https://text.pollinations.ai/openai/v1", "openai"),
+                  P("OpenRouter ucretsiz", "https://openrouter.ai/api/v1", "openrouter/free"),
+                  P("Venice", "https://api.venice.ai/api/v1", "llama-3.3-70b")
+              )
+          }
+
+          // ================= AG KATMANI =================
+
+          data class Msg(val role: String, val content: String)
+
+          class ChatApi {
+
+              private val jsonType = "application/json".toMediaType()
+
+              private val client = OkHttpClient.Builder()
+                  .connectTimeout(30, TimeUnit.SECONDS)
+                  .readTimeout(180, TimeUnit.SECONDS)
+                  .writeTimeout(30, TimeUnit.SECONDS)
+                  .build()
+
+              fun stream(
+                  baseUrl: String,
+                  apiKey: String,
+                  model: String,
+                  temperature: Float,
+                  messages: List<Msg>,
+                  onDelta: (String) -> Unit,
+                  onDone: () -> Unit,
+                  onError: (String) -> Unit
+              ): Call {
+
+                  val url = if (baseUrl.endsWith("/chat/completions")) baseUrl
+                  else baseUrl.trimEnd('/') + "/chat/completions"
+
+                  val body = JSONObject().apply {
+                      put("model", model)
+                      put("stream", true)
+                      put("temperature", temperature.toDouble())
+                      put("messages", JSONArray().apply {
+                          messages.forEach { m ->
+                              put(JSONObject().apply {
+                                  put("role", m.role)
+                                  put("content", m.content)
+                              })
+                          }
+                      })
+                  }
+
+                  val builder = Request.Builder()
+                      .url(url)
+                      .addHeader("Content-Type", "application/json")
+                      .addHeader("HTTP-Referer", "https://benaria.app")
+                      .addHeader("X-Title", "Ben Aria")
+
+                  if (apiKey.isNotBlank()) {
+                      builder.addHeader("Authorization", "Bearer $apiKey")
+                  }
+
+                  val call = client.newCall(
+                      builder.post(body.toString().toRequestBody(jsonType)).build()
+                  )
+
+                  call.enqueue(object : Callback {
+
+                      override fun onFailure(c: Call, e: IOException) {
+                          if (c.isCanceled()) onDone() else onError(e.message ?: "Ag hatasi")
+                      }
+
+                      override fun onResponse(c: Call, response: Response) {
+                          response.use { r ->
+                              if (!r.isSuccessful) {
+                                  val err = r.body?.string().orEmpty()
+                                  onError("Sunucu hatasi ${r.code}\n" + err.take(400))
+                                  return
+                              }
+
+                              val ct = r.header("Content-Type").orEmpty()
+
+                              if (ct.contains("event-stream")) {
+                                  val src = r.body?.source()
+                                  if (src == null) { onError("Bos yanit"); return }
+                                  while (!src.exhausted()) {
+                                      val line = src.readUtf8Line() ?: break
+                                      if (!line.startsWith("data:")) continue
+                                      val payload = line.removePrefix("data:").trim()
+                                      if (payload.isEmpty() || payload == "[DONE]") continue
+                                      try {
+                                          val ch = JSONObject(payload).optJSONArray("choices") ?: continue
+                                          if (ch.length() == 0) continue
+                                          val o = ch.getJSONObject(0)
+                                          var t = o.optJSONObject("delta")?.optString("content").orEmpty()
+                                          if (t.isEmpty()) {
+                                              t = o.optJSONObject("message")?.optString("content").orEmpty()
+                                          }
+                                          if (t.isNotEmpty()) onDelta(t)
+                                      } catch (_: Exception) {
+                                      }
+                                  }
+                                  onDone()
+                              } else {
+                                  val raw = r.body?.string().orEmpty()
+                                  val out = extractText(raw)
+                                  if (out.isEmpty()) {
+                                      onError("Beklenmeyen yanit:\n" + raw.take(400))
+                                  } else {
+                                      onDelta(out)
+                                      onDone()
+                                  }
+                              }
+                          }
+                      }
+                  })
+
+                  return call
+              }
+
+              private fun extractText(raw: String): String {
+                  val t = raw.trim()
+                  if (t.isEmpty()) return ""
+                  try {
+                      val o = JSONObject(t)
+                      val ch = o.optJSONArray("choices")
+                      if (ch != null && ch.length() > 0) {
+                          val c0 = ch.getJSONObject(0)
+                          val a = c0.optJSONObject("message")?.optString("content").orEmpty()
+                          if (a.isNotEmpty()) return a
+                          val b = c0.optJSONObject("delta")?.optString("content").orEmpty()
+                          if (b.isNotEmpty()) return b
+                          val d = c0.optString("text", "")
+                          if (d.isNotEmpty()) return d
+                      }
+                      val e = o.optString("content", "")
+                      if (e.isNotEmpty()) return e
+                      val f = o.optString("text", "")
+                      if (f.isNotEmpty()) return f
+                  } catch (_: Exception) {
+                  }
+                  return t
+              }
+          }
+
+          // ================= BEYIN =================
+
+          class ChatViewModel(app: Application) : AndroidViewModel(app) {
+
+              private val prefs = Prefs(app)
+              private val api = ChatApi()
+              private val main = Handler(Looper.getMainLooper())
+              private var call: Call? = null
+
+              val messages = mutableStateListOf<Msg>()
+
+              var streaming by mutableStateOf(false)
+                  private set
+
+              var error by mutableStateOf<String?>(null)
+
+              var apiKey by mutableStateOf(prefs.apiKey)
+                  private set
+              var baseUrl by mutableStateOf(prefs.baseUrl)
+                  private set
+              var model by mutableStateOf(prefs.model)
+                  private set
+              var systemPrompt by mutableStateOf(prefs.systemPrompt)
+                  private set
+              var temperature by mutableStateOf(prefs.temperature)
+                  private set
+
+              init {
+                  loadHistory()
+                  if (messages.isEmpty()) messages.add(Msg("assistant", AriaPrompt.GREETING))
+              }
+
+              fun saveSettings(key: String, url: String, mdl: String, prompt: String, temp: Float) {
+                  apiKey = key.trim()
+                  baseUrl = url.trim().ifEmpty { Prefs.DEFAULT_BASE_URL }
+                  model = mdl.trim().ifEmpty { Prefs.DEFAULT_MODEL }
+                  systemPrompt = prompt
+                  temperature = temp
+
+                  prefs.apiKey = apiKey
+                  prefs.baseUrl = baseUrl
+                  prefs.model = model
+                  prefs.systemPrompt = systemPrompt
+                  prefs.temperature = temperature
+              }
+
+              fun applyPreset(p: Presets.P) {
+                  baseUrl = p.url
+                  model = p.model
+                  prefs.baseUrl = baseUrl
+                  prefs.model = model
+              }
+
+              fun send(text: String) {
+                  if (text.isBlank() || streaming) return
+
+                  error = null
+                  messages.add(Msg("user", text.trim()))
+                  messages.add(Msg("assistant", ""))
+                  streaming = true
+
+                  val payload = ArrayList<Msg>()
+                  if (systemPrompt.isNotBlank()) payload.add(Msg("system", systemPrompt))
+                  payload.addAll(messages.dropLast(1))
+
+                  call = api.stream(
+                      baseUrl = baseUrl,
+                      apiKey = apiKey,
+                      model = model,
+                      temperature = temperature,
+                      messages = payload,
+                      onDelta = { delta ->
+                          main.post {
+                              val i = messages.lastIndex
+                              if (i >= 0) {
+                                  messages[i] = messages[i].copy(content = messages[i].content + delta)
+                              }
+                          }
+                      },
+                      onDone = {
+                          main.post {
+                              streaming = false
+                              persist()
+              
